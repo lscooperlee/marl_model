@@ -1,4 +1,5 @@
 from collections import deque
+from functools import reduce
 import random
 
 import numpy as np
@@ -21,7 +22,7 @@ class RDQNModel:
         assert all(inp % ker == 0 for inp, ker in zip(input_size, self.kernel_size))
 
         self.input_size = input_size
-        self.output_size = output_size
+        self.output_size = output_size + 1
         self.input_channel = input_channel
 
         REPLAY_MEMORY_SIZE = 100000
@@ -33,29 +34,28 @@ class RDQNModel:
         self.min_epsilon = 0.05
         self.epsilon_decay = 0.99
 
-        self.model = self.create_q_model(self.kernel_size[0] * self.kernel_size[1]*self.input_channel,
-                                         self.output_size, model_path)
-        self.target_model = self.create_q_model(
-            self.kernel_size[0] * self.kernel_size[1]*self.input_channel, self.output_size, model_path)
+        self.model_path = model_path
+
+        model_size = (self.kernel_size[0] * self.kernel_size[1] + 2)*self.input_channel
+        self.model = self.create_q_model(model_size, self.output_size)
+        self.target_model = self.create_q_model(model_size, self.output_size)
 
         self.training_level = 0
         self.max_level = 2
 
-    def create_q_model(self, state_size, action_size, model_path=None):
-        if model_path is None:
-            observation = layers.Input(shape=state_size, name='input')
-            # layer1 = layers.Dense(512, activation="relu")(observation)
-            # layer2 = layers.Dense(64, activation="relu")(layer1)
-            # layer3 = layers.Dense(64, activation="relu")(layer2)
-            # action = layers.Dense(action_size, activation="linear")(layer3)
-            layer1 = layers.Dense(64, activation="relu")(observation)
-            layer2 = layers.Dense(64, activation="relu")(layer1)
-            action = layers.Dense(action_size, activation="linear")(layer2)
-            # action = layers.Dense(action_space, activation="relu")(layer2)
+    def create_q_model(self, state_size, action_size):
 
-            model = keras.Model(inputs=observation, outputs=action)
-        else:
-            model = keras.models.load_model(model_path)
+        observation = layers.Input(shape=state_size, name='input')
+        # layer1 = layers.Dense(512, activation="relu")(observation)
+        # layer2 = layers.Dense(64, activation="relu")(layer1)
+        # layer3 = layers.Dense(64, activation="relu")(layer2)
+        # action = layers.Dense(action_size, activation="linear")(layer3)
+        layer1 = layers.Dense(64, activation="relu")(observation)
+        layer2 = layers.Dense(64, activation="relu")(layer1)
+        action = layers.Dense(action_size, activation="linear")(layer2)
+        # action = layers.Dense(action_space, activation="relu")(layer2)
+
+        model = keras.Model(inputs=observation, outputs=action)
 
         #optimizer = keras.optimizers.Adam(learning_rate=0.00025, clipnorm=1.0)
         #model.compile(loss="mse", optimizer=optimizer)
@@ -66,11 +66,31 @@ class RDQNModel:
 
         return model
 
-    def scale_state(self, state):
-        return np.max(state.reshape(9, -1, self.input_channel), axis=1).reshape(-1)
+    def scale_state_level(self, state, level=0, action=0):
+        reshape_3x3 = state.reshape(9, -1, self.input_channel)
+        reduce_each_input_channel = np.max(reshape_3x3, axis=1)
+        flatten = reduce_each_input_channel.reshape(-1)
+        extra = [level, action]
+        extended = np.hstack((flatten, extra))
+        return extended
 
-    def scale_state_batch(self, state):
-        return np.max(state.reshape(self.mini_batch_size, 9, -1, self.input_channel), axis=2).reshape(self.mini_batch_size, -1)
+    def scale_state_batch_level(self, state, level=0, action=0):
+        reshape_to_batch_size = state.reshape(self.mini_batch_size, 9, -1, self.input_channel)
+        reduce_each_input_channel = np.max(reshape_to_batch_size, axis=2)
+        reshape_flatten_last = reduce_each_input_channel.reshape(self.mini_batch_size, -1)
+        return reshape_flatten_last
+
+    def scale_state(self, state):
+        reshape_3x3 = state.reshape(9, -1, self.input_channel)
+        reduce_each_input_channel = np.max(reshape_3x3, axis=1)
+        flatten = reduce_each_input_channel.reshape(-1)
+        return flatten
+
+    def scale_state_batch(self, state, level=0, action=0):
+        reshape_to_batch_size = state.reshape(self.mini_batch_size, 9, -1, self.input_channel)
+        reduce_each_input_channel = np.max(reshape_to_batch_size, axis=2)
+        reshape_flatten_last = reduce_each_input_channel.reshape(self.mini_batch_size, -1)
+        return reshape_flatten_last
 
     def get_next_action(self, state, with_random=False):
         repeat = self.input_size[0] // np.power(self.kernel_size[0], self.training_level) 
@@ -97,24 +117,17 @@ class RDQNModel:
         if len(self.replay_memory) < self.mini_batch_size:
             return
 
-        NUM_OF_EPISODE_M = 1
+        data = self.recall()
+        states, actions, rewards, next_states, are_done = list(zip(*data))
+        scaled_states = self.scale_state_batch(np.array(states))
+#            scaled_states[:,self.input_channel-1::self.input_channel] = level > 0
+        scaled_next_states = self.scale_state_batch(np.array(next_states))
 
-        for _ in range(NUM_OF_EPISODE_M):  # for episode = 1, M do
+        self.train_kernel(scaled_states, actions, rewards, scaled_next_states, are_done)
 
-            data = self.recall()
-            states, actions, rewards, next_states, are_done = list(zip(*data))
-            scaled_states = self.scale_state_batch(np.array(states))
-            scaled_next_states = self.scale_state_batch(np.array(next_states))
-
-            self.train_kernel(scaled_states, actions, rewards, scaled_next_states, are_done)
-
-            # before model trained well, use random
-            if self.epsilon > self.min_epsilon:
-                # print(self.epsilon)
-                self.epsilon *= self.epsilon_decay
-            
-            q_v = np.max(self.target_model.predict(scaled_states), axis=1)
-            # print(q_v)
+        # before model trained well, use random
+        if self.epsilon > self.min_epsilon:
+            self.epsilon *= self.epsilon_decay
 
         self.target_model.set_weights(self.model.get_weights())
 
@@ -123,12 +136,14 @@ class RDQNModel:
         expected_q_value_next_state = np.max(self.target_model.predict(next_states), axis=1)
         q_value_for_update = self.gamma * expected_q_value_next_state * np.logical_not(are_done) + rewards
         q_value_from_model = self.model.predict(states)
-        q_value_from_model[np.arange(len(q_value_from_model)), actions] = q_value_for_update
+        index = np.arange(len(q_value_from_model)) # [0, 1, 2, ..., batch_size]
+        q_value_from_model[index, actions] = q_value_for_update 
 
         self.model.fit(np.array(states),
                        q_value_from_model,
                        batch_size=self.mini_batch_size,
                        verbose=0)
 
-    def save(self, model_path):
-        self.model.save(model_path)
+    def save(self):
+        if self.model_path:
+            self.model.save(f'{self.model_path}/model_file')
