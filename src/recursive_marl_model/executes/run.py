@@ -4,9 +4,10 @@ import time
 
 #from ..env.simple_env import RobotTaskAllocationEnv
 from ..env.simple_env1 import RobotTaskAllocationEnv
-from ..model.dqn import DQNModel
-from ..model.rdqn import RDQNModel
-from ..model.ddqn import RDQNModel as DDQNModel
+#from ..model.dqn import DQNModel
+#from ..model.rdqn import RDQNModel
+#from ..model.ddqn import RDQNModel as DQNModel
+from ..model.rdqn import RDQNModel as DQNModel
 from ..evaluation.evaluator import RewardEvaluator
 
 
@@ -28,11 +29,9 @@ def run_env_model(env, model, train=True, with_random=True, with_render=False, r
         else:
             next_state, reward, done, _ = env.step(action)
 
-        # if reward > 0:
-        #     reward = reward * repeat * repeat * repeat * repeat
-
         if train:
-            model.memorize(state, action, reward, next_state, done)
+            #model.memorize(state, action, reward, next_state, done)
+            model.memorize(state, action, reward*repeat, next_state, done)
 
         state = next_state
         episode_reward += reward
@@ -98,8 +97,8 @@ def train(min_episodes=500000, model_path='/tmp/model_path'):
     else:
         os.mkdir(model_path)
 
-    env = RobotTaskAllocationEnv(map_shape=(9, 9))
-    model = DQNModel(env.observation_space, env.action_space, model_path)
+    # env = RobotTaskAllocationEnv(map_shape=(9, 9))
+    # model = DQNModel(env.observation_space, env.action_space, model_path)
 
     # simple test
     # env = RobotTaskAllocationEnv(map_shape=(3, 3))
@@ -107,11 +106,11 @@ def train(min_episodes=500000, model_path='/tmp/model_path'):
 
     # for ddqn
     # env = RobotTaskAllocationEnv(map_shape=(1, 9))
-    # model = DDQNModel((1, 9), env.action_space, kernel_size=(1, 3))
+    # model = DQNModel((1, 9), env.action_space, kernel_size=(1, 3))
 
     # for ddqn 2D
-    # env = RobotTaskAllocationEnv(map_shape=(9, 9))
-    # model = DDQNModel((9, 9), env.action_space, kernel_size=(3, 3))
+    env = RobotTaskAllocationEnv(map_shape=(9, 9))
+    model = DQNModel((9, 9), env.action_space, kernel_size=(3, 3))
 
     evaluator = RewardEvaluator(model_path)
 
@@ -148,7 +147,7 @@ def train(min_episodes=500000, model_path='/tmp/model_path'):
 
 def replay(model_path='/tmp/model_path'):
     env = RobotTaskAllocationEnv(map_shape=(9, 9))
-    model = DDQNModel((3, 3), env.action_space, model_path=model_path)
+    model = DQNModel((3, 3), env.action_space, model_path=model_path)
     run_env_model(env, model, train=False, with_random=False, with_render=True, delay=0, render_clear=False)
 
 
