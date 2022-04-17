@@ -3,10 +3,9 @@ import numpy as np
 import time
 
 from ..env.simple_env import RobotTaskAllocationEnv
-#from ..model.dqn import DQNModel
-#from ..model.rdqn import RDQNModel
-#from ..model.ddqn import DDQNModel
-from ..model.rdqn import RDQNModel as DQNModel
+from ..model.dqn import DQNModel
+from ..model.rdqn import RDQNModel
+from ..model.ddqn import DDQNModel
 from ..evaluation.evaluator import RewardEvaluator
 
 
@@ -29,7 +28,7 @@ def run_env_model(env, model, train=True, with_random=True, with_render=False, r
 
         if train:
             #model.memorize(state, action, reward, next_state, done)
-            model.memorize(state, action, reward*repeat, next_state, done)
+            model.memorize(state, action, reward * repeat, next_state, done)
 
         state = next_state
         episode_reward += reward
@@ -47,7 +46,8 @@ def run_env_model(env, model, train=True, with_random=True, with_render=False, r
 
     return episode_reward
 
-def train(min_episodes=500000, model_path='/tmp/model_path'):
+
+def train(min_episodes=500000, model_path='/tmp/model_path', env_shape=(1, 9), qmodel='rdqn'):
     if os.path.exists(model_path):
         ans = input(f'Warning: {model_path} exists, files will be rewrite if continue. [y/N]?')
         if ans not in ['y', 'Y']:
@@ -55,20 +55,34 @@ def train(min_episodes=500000, model_path='/tmp/model_path'):
     else:
         os.mkdir(model_path)
 
-    # env = RobotTaskAllocationEnv(map_shape=(9, 9))
-    # model = DQNModel(env.observation_space, env.action_space, model_path)
+    env = RobotTaskAllocationEnv(env_shape)
+    if env_shape == (1, 9):
+        kernel_size = (1, 3)
+    elif env_shape == (9, 9):
+        kernel_size = (3, 3)
+    elif env_shape == (3, 3):
+        kernel_size = None
+    else:
+        raise RuntimeError(f'{env_shape} map not supported')
 
-    # simple test
-    # env = RobotTaskAllocationEnv(map_shape=(3, 3))
-    # model = DQNModel(env.observation_space, env.action_space, model_path)
+    if qmodel == 'rdqn':
+        if kernel_size:
+            model = RDQNModel(env.observation_space,
+                              env.action_space,
+                              model_path=model_path,
+                              kernel_size=kernel_size,
+                              input_channel=env.TOTAL_CHANNEL)
+        else:
+            raise RuntimeError('3x3 map not supported for RDQN')
+    elif qmodel == 'dqn':
+        model = DQNModel(env.observation_space,
+                         env.action_space,
+                         model_path=model_path,
+                         kernel_size=kernel_size,
+                         input_channel=env.TOTAL_CHANNEL)
+    else:
+        raise RuntimeError(f'{model} map not supported')
 
-    # for ddqn
-    # env = RobotTaskAllocationEnv(map_shape=(1, 9))
-    # model = DQNModel((1, 9), env.action_space, kernel_size=(1, 3))
-
-    # for ddqn 2D
-    env = RobotTaskAllocationEnv(map_shape=(9, 9))
-    model = DQNModel((9, 9), env.action_space, kernel_size=(3, 3), input_channel=env.TOTAL_CHANNEL)
 
     evaluator = RewardEvaluator(model_path)
 
@@ -77,16 +91,12 @@ def train(min_episodes=500000, model_path='/tmp/model_path'):
     start_time = time.perf_counter()
 
     for i in range(1, min_episodes):
-        #episode_reward = run_env_model(env, model)#, with_render=True, render_clear=False)
-        # for ddqn
-        episode_reward = run_env_model(env, model)  #, with_render=True, render_clear=False)
+        episode_reward = run_env_model(env, model)
         episode_rewards.append(episode_reward)
 
         model.train()
 
         if i % 100 == 0:
-            # ret = run_env_model(env, model, train=False, with_random=False, with_render=True, delay=0, render_clear=False)
-            # for ddqn
             ret = run_env_model(env,
                                 model,
                                 train=False,
@@ -94,7 +104,7 @@ def train(min_episodes=500000, model_path='/tmp/model_path'):
                                 with_render=True,
                                 delay=0,
                                 render_clear=True)
-            #print(ret)
+
             mean_reward = np.array(episode_rewards).mean()
             evaluator.save_reward(i, mean_reward)
             model.save()
@@ -103,9 +113,23 @@ def train(min_episodes=500000, model_path='/tmp/model_path'):
             print(f'{i}: passed time={passed_time}, mean_reward={mean_reward}')
 
 
-def replay(model_path='/tmp/model_path'):
-    env = RobotTaskAllocationEnv(map_shape=(9, 9))
-    model = DQNModel((3, 3), env.action_space, model_path=model_path)
+def replay(model_path='/tmp/model_path', env_shape=(1, 9), model='rdqn'):
+    env = RobotTaskAllocationEnv(env_shape)
+    if env_shape == (1, 9):
+        kernel_size = (1, 3)
+    elif env_shape == (9, 9):
+        kernel_size = (3, 3)
+    elif env_shape == (3, 3):
+        kernel_size = None
+
+    if model == 'rdqn':
+        if kernel_size:
+            model = RDQNModel(env.observation_space, env.action_space, model_path=model_path, kernel_size=kernel_size)
+        else:
+            raise RuntimeError('3x3 map not supported for RDQN')
+    elif model == 'dqn':
+        model = DQNModel(env.observation_space, env.action_space, model_path=model_path, kernel_size=kernel_size)
+
     run_env_model(env, model, train=False, with_random=False, with_render=True, delay=0, render_clear=False)
 
 

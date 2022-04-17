@@ -1,5 +1,5 @@
 from collections import deque
-from functools import reduce
+import os
 import random
 
 import numpy as np
@@ -31,7 +31,7 @@ class DDQNModel:
         self.epsilon_decay = 0.99
 
         self.model_path = model_path
-        if model_path:
+        if model_path and os.path.exists(f'{model_path}/model_file'):
             self.model_level1 = keras.models.load_model(f'{model_path}/model_file')
             self.target_model_level1 = keras.models.load_model(f'{model_path}/model_file')
         else:
@@ -84,7 +84,7 @@ class DDQNModel:
         reshape_kernel = state.reshape(self.mini_batch_size, -1, self.kernel_size[0] * self.kernel_size[1],
                                        self.input_channel)
         reduce_each_input_channel = np.max(reshape_kernel, axis=2)
-        
+
         index = np.argmax(reduce_each_input_channel[:, :, 0] == 1, axis=1)
         index_ = np.arange(self.mini_batch_size)  # [0, 1, 2, ..., batch_size]
         reshape_flatten_last = reshape_kernel[index_, index]

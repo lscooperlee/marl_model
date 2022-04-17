@@ -1,5 +1,5 @@
 from collections import deque
-from gc import callbacks
+import os
 import random
 
 import numpy as np
@@ -25,33 +25,21 @@ class DQNModel:
         self.min_epsilon = 0.05
         self.epsilon_decay = 0.99
 
-        # GAMMA_DISCOUNT = 0.99
-        # MINI_BATCH_SIZE = 64
-        # REPLAY_MEMORY_SIZE = 10000
-        # NUM_OF_EPISODE_M = 100000
-
         self.model_path = model_path
-
-        self.model = self.create_q_model(self.input_size, self.output_size)
-        self.target_model = self.create_q_model(self.input_size, self.output_size)
+        if model_path and os.path.exists(f'{model_path}/model_file'):
+            self.model = keras.models.load_model(f'{model_path}/model_file')
+            self.target_model = keras.models.load_model(f'{model_path}/model_file')
+        else:
+            self.model = self.create_q_model(self.input_size, self.output_size)
+            self.target_model = self.create_q_model(self.input_size, self.output_size)
 
     def create_q_model(self, state_size, action_size):
         observation = layers.Input(shape=state_size, name='input')
-        # layer1 = layers.Dense(512, activation="relu")(observation)
-        # layer2 = layers.Dense(64, activation="relu")(layer1)
-        # layer3 = layers.Dense(64, activation="relu")(layer2)
-        # action = layers.Dense(action_size, activation="linear")(layer3)
         layer1 = layers.Dense(64, activation="relu")(observation)
         layer2 = layers.Dense(64, activation="relu")(layer1)
         action = layers.Dense(action_size, activation="linear")(layer2)
-        # action = layers.Dense(action_space, activation="relu")(layer2)
 
         model = keras.Model(inputs=observation, outputs=action)
-        # else:
-        #     model = keras.models.load_model('my_model')
-
-        #optimizer = keras.optimizers.Adam(learning_rate=0.00025, clipnorm=1.0)
-        #model.compile(loss="mse", optimizer=optimizer)
         model.compile(
             loss="mse",
             optimizer=keras.optimizers.Adam(learning_rate=self.learning_rate),

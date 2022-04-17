@@ -1,5 +1,5 @@
 from collections import deque
-from functools import reduce
+import os
 import random
 
 import numpy as np
@@ -31,7 +31,7 @@ class RDQNModel:
         self.epsilon_decay = 0.99
 
         self.model_path = model_path
-        if model_path:
+        if model_path and os.path.exists(f'{model_path}/model_file'):
             self.model = keras.models.load_model(f'{model_path}/model_file')
             self.target_model = keras.models.load_model(f'{model_path}/model_file')
         else:
