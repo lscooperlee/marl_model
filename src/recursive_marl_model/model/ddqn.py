@@ -9,7 +9,7 @@ from tensorflow.keras import layers
 np.set_printoptions(precision=3)
 
 
-class RDQNModel:
+class DDQNModel:
 
     def __init__(self, input_size, output_size, kernel_size=(3, 3), input_channel=4, model_path=None) -> None:
         self.truck_channel = 0

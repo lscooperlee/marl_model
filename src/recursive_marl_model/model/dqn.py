@@ -12,8 +12,8 @@ np.set_printoptions(precision=3)
 
 class DQNModel:
 
-    def __init__(self, input_size, output_size, model_path=None) -> None:
-        self.input_size = input_size
+    def __init__(self, input_size, output_size, input_channel=4, model_path=None, **kwargs) -> None:
+        self.input_size = input_size[0] * input_size[1] * input_channel
         self.output_size = output_size
 
         REPLAY_MEMORY_SIZE = 100000

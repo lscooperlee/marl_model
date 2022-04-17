@@ -24,7 +24,6 @@ class RobotTaskAllocationEnv:
         self.ogm = np.zeros(map_shape) if occupancy_grid_map is None else occupancy_grid_map
 
         map_size = map_shape[0] * map_shape[1]
-        num_states = map_size
         num_actions = len(self.ACTION)
 
         self.start_loc = start_loc
@@ -38,7 +37,7 @@ class RobotTaskAllocationEnv:
         self.map_shape = map_shape
 
         self.action_space = num_actions
-        self.observation_space = num_states * self.TOTAL_CHANNEL
+        self.observation_space = map_shape
 
         self.is_picked = False
 

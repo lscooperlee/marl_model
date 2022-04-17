@@ -5,7 +5,7 @@ import time
 from ..env.simple_env import RobotTaskAllocationEnv
 #from ..model.dqn import DQNModel
 #from ..model.rdqn import RDQNModel
-#from ..model.ddqn import RDQNModel as DQNModel
+#from ..model.ddqn import DDQNModel
 from ..model.rdqn import RDQNModel as DQNModel
 from ..evaluation.evaluator import RewardEvaluator
 
