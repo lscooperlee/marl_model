@@ -2,8 +2,7 @@ import os
 import numpy as np
 import time
 
-#from ..env.simple_env import RobotTaskAllocationEnv
-from ..env.simple_env1 import RobotTaskAllocationEnv
+from ..env.simple_env import RobotTaskAllocationEnv
 #from ..model.dqn import DQNModel
 #from ..model.rdqn import RDQNModel
 #from ..model.ddqn import RDQNModel as DQNModel
@@ -17,17 +16,16 @@ def run_env_model(env, model, train=True, with_random=True, with_render=False, r
         env.render(render_clear)
 
     episode_reward = 0
-    for ii in range(1000000):
 
-        #action, repeat = model.get_next_action_level1(state, with_random)
+    while True:
         action, repeat = model.get_next_action(state, with_random)
         if train:
             for _ in range(repeat):
-                next_state, reward, done, _ = env.step(action)
+                next_state, reward, done = env.step(action)
                 if done:
                     break
         else:
-            next_state, reward, done, _ = env.step(action)
+            next_state, reward, done = env.step(action)
 
         if train:
             #model.memorize(state, action, reward, next_state, done)
@@ -48,46 +46,6 @@ def run_env_model(env, model, train=True, with_random=True, with_render=False, r
             break
 
     return episode_reward
-
-
-def run_env_model_back(env, model, train=True, with_random=True, with_render=False, render_clear=True, delay=0):
-    state = env.reset()
-    if with_render:
-        env.render(render_clear)
-
-    episode_reward = 0
-    while True:
-
-        action, repeat = model.get_next_action(state, with_random)
-        next_state, reward, done, _ = env.step(action)
-
-        # for _ in range(repeat):
-        #     next_state, reward, done, _ = env.step(action)
-
-        #     if done:
-        #         break
-
-        # if reward > 0:
-        #     reward = reward * repeat * repeat * repeat * repeat
-
-        if train:
-            model.memorize(state, action, reward, next_state, done)
-
-        state = next_state
-        episode_reward += reward
-
-        if with_render:
-            print(action)
-            env.render(render_clear)
-
-        if delay:
-            time.sleep(delay)
-
-        if done:
-            break
-
-    return episode_reward
-
 
 def train(min_episodes=500000, model_path='/tmp/model_path'):
     if os.path.exists(model_path):
@@ -110,7 +68,7 @@ def train(min_episodes=500000, model_path='/tmp/model_path'):
 
     # for ddqn 2D
     env = RobotTaskAllocationEnv(map_shape=(9, 9))
-    model = DQNModel((9, 9), env.action_space, kernel_size=(3, 3))
+    model = DQNModel((9, 9), env.action_space, kernel_size=(3, 3), input_channel=env.TOTAL_CHANNEL)
 
     evaluator = RewardEvaluator(model_path)
 
