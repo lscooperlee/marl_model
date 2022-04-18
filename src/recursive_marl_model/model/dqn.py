@@ -58,8 +58,7 @@ class DQNModel:
             return np.argmax(qv), 1
 
     def memorize(self, state_t, action_t, reward_t, state_t_1, done):
-        self.replay_memory.append(
-            [state_t, action_t, reward_t, state_t_1, done])
+        self.replay_memory.append([state_t, action_t, reward_t, state_t_1, done])
 
     def recall(self):
         return random.sample(self.replay_memory, self.mini_batch_size)
@@ -75,17 +74,14 @@ class DQNModel:
 
             data = self.recall()
             states, actions, rewards, next_states, are_done = list(zip(*data))
-            expected_q_value_next_state = np.max(self.target_model.predict(
-                np.array(next_states)),
-                                                 axis=1)
+            expected_q_value_next_state = np.max(self.target_model.predict(np.array(next_states)), axis=1)
             #print(expected_q_value_next_state)
-            q_value_for_update = self.gamma * expected_q_value_next_state * np.logical_not(
-                are_done) + rewards
+            q_value_for_update = self.gamma * expected_q_value_next_state * np.logical_not(are_done) + rewards
+            print(q_value_for_update)
             #print(q_value_for_update)
             q_value_from_model = self.model.predict(np.array(states))
             #print(q_value_from_model)
-            q_value_from_model[np.arange(len(q_value_from_model)),
-                               actions] = q_value_for_update
+            q_value_from_model[np.arange(len(q_value_from_model)), actions] = q_value_for_update
             #print(states)
             #print(q_value_from_model)
 

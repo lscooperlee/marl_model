@@ -2,6 +2,8 @@ import random
 
 import numpy as np
 
+a = 0
+
 
 class RobotTaskAllocationEnv:
     """
@@ -14,11 +16,11 @@ class RobotTaskAllocationEnv:
 
     ACTION = ["left", "right", "up", "down", "stay"]
 
-    REWARDS = {"finished": 100, "hit": -20, "timeout": -10, "move": -1}
+    REWARDS = {"finished": 100, "hit": -20, "timeout": -40, "move": -1}
 
     TIMEOUT = 100
 
-    def __init__(self, map_shape=(3, 3), occupancy_grid_map=None, truck_loc=None, start_loc=None, end_loc=None):
+    def __init__(self, map_shape=(3, 3), occupancy_grid_map=None, start_loc=None, end_loc=None, fixed_task=True):
 
         self.map = np.zeros((map_shape[0], map_shape[1], self.TOTAL_CHANNEL), dtype=np.float32)
         self.ogm = np.zeros(map_shape) if occupancy_grid_map is None else occupancy_grid_map
@@ -28,7 +30,7 @@ class RobotTaskAllocationEnv:
 
         self.start_loc = start_loc
         self.end_loc = end_loc
-        self.truck_loc = truck_loc
+        self.truck_loc = None
 
         assert (self.ogm[self.start_loc] == 0 if self.start_loc else True)
         assert (self.ogm[self.end_loc] == 0 if self.end_loc else True)
@@ -43,6 +45,8 @@ class RobotTaskAllocationEnv:
 
         self.step_count = 0
 
+        self.fixed_task = fixed_task
+
     def step(self, action):
 
         self.step_count += 1
@@ -55,8 +59,9 @@ class RobotTaskAllocationEnv:
         self.map[self.truck_loc][self.TRUCK_CHANNEL] = 0
         hit_prob = self._move(action)
         # hit
-        if random.random() < hit_prob:
-            return self.map.copy().reshape(-1), self.REWARDS['hit'], True
+        # not punish hit for now, meaning cound still action after hit
+        # if random.random() < hit_prob:
+        #     return self.map.copy().reshape(-1), self.REWARDS['hit'], True
 
         if self.truck_loc == self.start_loc:
             self.is_picked = True
@@ -69,18 +74,26 @@ class RobotTaskAllocationEnv:
         if self.step_count == self.TIMEOUT:
             return self.map.copy().reshape(-1), self.REWARDS['timeout'], True
 
+        # finished
+        if self.is_picked and self.truck_loc == self.end_loc:
+            return self.map.copy().reshape(-1), self.REWARDS['finished'], True
+
         return self.map.copy().reshape(-1), self.REWARDS['move'], False
 
-    def reset(self):
+    def reset(self, truck=None):
 
-        # with overlap
-        index_space = [(x, y) for x in range(self.map_shape[0]) for y in range(self.map_shape[1])]
-        index_weight = (self.ogm == 0).astype(int).reshape(-1).tolist()
-        start_loc, end_loc, truck_loc = random.choices(index_space, k=3, weights=index_weight)
+        idx_space = [(x, y) for x in range(self.map_shape[0]) for y in range(self.map_shape[1])]
+        idx_weight = (self.ogm == 0).astype(int).reshape(-1).tolist()
+        if not self.fixed_task:
+            self.start_loc, self.end_loc = random.choices(idx_space, k=2, weights=idx_weight)
+        else:
+            self.start_loc = self.start_loc if self.start_loc else random.choices(idx_space, k=1, weights=idx_weight)[0]
+            self.end_loc = self.end_loc if self.end_loc else random.choices(idx_space, k=1, weights=idx_weight)[0]
 
-        self.start_loc = self.start_loc if self.start_loc else start_loc
-        self.end_loc = self.end_loc if self.end_loc else end_loc
-        self.truck_loc = self.truck_loc if self.truck_loc else truck_loc
+        if truck is None:
+            self.truck_loc = random.choices(idx_space, k=1, weights=idx_weight)[0]
+        else:
+            self.truck_loc = truck
 
         self.step_count = 0
 
@@ -105,14 +118,18 @@ class RobotTaskAllocationEnv:
         else:
             render_map[self.truck_loc] = 'T'
 
+        output = '-' * self.map_shape[1] + '\n'
         for row in render_map:
-            print(row.tobytes().decode())
+            output += row.tobytes().decode() + '\n'
+        output += '+' * self.map_shape[1]
+
+        print(output)
 
         if clear:
-            for row in render_map:
+            for _ in range(len(render_map) + 2):
                 print("\033[F\033[J", end="")
-        else:
-            print('-' * self.map_shape[0])
+
+        return output
 
     def _move(self, action):  # 0=left, 1=right, 2=up, 3=down, 4=stay
         new_truck = list(self.truck_loc)
