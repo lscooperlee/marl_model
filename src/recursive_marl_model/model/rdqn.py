@@ -38,6 +38,9 @@ class RDQNModel:
             model_size = (self.kernel_size[0] * self.kernel_size[1]) * self.input_channel
             self.model = self.create_q_model(model_size*2, self.output_size)
             self.target_model = self.create_q_model(model_size*2, self.output_size)
+        
+        self.up_qvalue_ratio_decay = 0.99
+        self.up_qvalue_ratio = 1
 
     def create_q_model(self, state_size, action_size):
 
@@ -132,6 +135,8 @@ class RDQNModel:
         if self.epsilon > self.min_epsilon:
             self.epsilon *= self.epsilon_decay
 
+        self.up_qvalue_ratio *= self.up_qvalue_ratio_decay
+        
         self.target_model.set_weights(self.model.get_weights())
 
     def train_kernel_level1(self, states, actions, rewards, next_states, are_done):
@@ -150,9 +155,17 @@ class RDQNModel:
 
         expected_q_value_next_state = np.max(self.target_model.predict(next_states), axis=1)
         q_value_for_update = self.gamma * expected_q_value_next_state * np.logical_not(are_done) + rewards
+        print(q_value_for_update)
 
         # strategy 1: max
-        q_value_for_update = np.max(np.array([q_value_for_update, uplevel_rewards]), axis=0)
+        # q_value_for_update = np.max(np.array([q_value_for_update, uplevel_rewards]), axis=0)
+
+        # strategy 2: with ratio
+        # q_value_for_update = q_value_for_update + uplevel_rewards * self.up_qvalue_ratio
+
+        # strategy 3: with prob
+        # if random.random() < self.up_qvalue_ratio:
+        #     q_value_for_update = np.max(np.array([q_value_for_update, uplevel_rewards]), axis=0)
 
         q_value_from_model = self.model.predict(states)
         index = np.arange(len(q_value_from_model))  # [0, 1, 2, ..., batch_size]
