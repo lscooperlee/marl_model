@@ -3,8 +3,8 @@ import random
 
 import numpy as np
 
-from recursive_marl_model.model.rdqn import RDQNModel
-from recursive_marl_model.env.simple_env import RobotTaskAllocationEnv
+from marl_model.model.rdqn import RDQNModel
+from marl_model.env.simple_env import RobotTaskAllocationEnv
 
 
 class TestModel(unittest.TestCase):

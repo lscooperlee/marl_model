@@ -9,6 +9,22 @@ from tensorflow.keras import layers
 np.set_printoptions(precision=3)
 
 
+class CustomCallback(keras.callbacks.Callback):
+    # https://keras.io/guides/writing_your_own_callbacks/
+
+    def on_train_begin(self, logs=None):
+        self.weights_accuracy = []
+
+    def on_epoch_end(self, epoch, logs=None):
+        if logs.get('accuracy') == 1:
+            self.model.stop_training = True
+        self.weights_accuracy.append([logs.get('accuracy'), self.model.get_weights()])
+
+    def on_train_end(self, logs=None):
+        self.weights_accuracy.sort(key=lambda x: x[0])
+        self.model.set_weights(self.weights_accuracy[-1][1])
+
+
 class DDQNModel:
 
     def __init__(self, input_size, output_size, kernel_size=(3, 3), input_channel=4, model_path=None) -> None:
@@ -29,6 +45,9 @@ class DDQNModel:
         self.epsilon = 1
         self.min_epsilon = 0.05
         self.epsilon_decay = 0.99
+        self.epoch = 10
+
+        self.get_action_level = 1
 
         self.model_path = model_path
         if model_path and os.path.exists(f'{model_path}/model_file'):
@@ -41,8 +60,10 @@ class DDQNModel:
             self.model_level2 = self.create_q_model_level1(model_size_level1 * 2, self.output_size)
             self.target_model_level2 = self.create_q_model_level1(model_size_level1 * 2, self.output_size)
 
-        self.training_level = 0
-        self.max_level = 2
+        self.up_qvalue_ratio_decay = 0.99
+        self.up_qvalue_ratio = 1
+        self.replay_memory1 = deque(maxlen=REPLAY_MEMORY_SIZE)
+        self.replay_memory2 = deque(maxlen=REPLAY_MEMORY_SIZE)
 
     def create_q_model_level1(self, state_size, action_size):
 
@@ -92,46 +113,79 @@ class DDQNModel:
 
     def get_next_action(self, state, with_random=False):
         repeat_n = self.input_size[1] // self.kernel_size[1]
-        repeat = np.random.choice(range(1, repeat_n + 1))
+        #repeat = np.random.choice(range(1, repeat_n + 1))
+        repeat = repeat_n
 
         if with_random and np.random.uniform(0, 1) < self.epsilon:
-            return random.randrange(self.output_size), repeat
+            if with_random and np.random.uniform(0, 1) < 0.5:
+                self.get_action_level = 1
+                return random.randrange(self.output_size), repeat
+            else:
+                self.get_action_level = 2
+                return random.randrange(self.output_size)
         else:
-            scaled_state1 = self.scale_state_level1(np.array(state))
-            scaled_state2 = self.scale_state_level2(np.array(state))
-            scaled_state = np.array([scaled_state1, scaled_state2])
-            qv = self.model_level2.predict(scaled_state.reshape(1, -1))[0]
-            action = np.argmax(qv)
-
-            return action, repeat
+            #if with_random and np.random.uniform(0, 1) < self.epsilon:
+            if with_random and np.random.uniform(0, 1) < 0.5:
+                self.get_action_level = 1
+                scaled_state1 = self.scale_state_level1(np.array(state))
+                qv = self.model_level1.predict(scaled_state1.reshape(1, -1))[0]
+                action = np.argmax(qv)
+                return action, repeat
+            else:
+                self.get_action_level = 2
+                scaled_state1 = self.scale_state_level1(np.array(state))
+                scaled_state2 = self.scale_state_level2(np.array(state))
+                scaled_state = np.array([scaled_state1, scaled_state2])
+                qv = self.model_level2.predict(scaled_state.reshape(1, -1))[0]
+                action = np.argmax(qv)
+                return action
 
     def memorize(self, state_t, action_t, reward_t, state_t_1, done):
-        self.replay_memory.append([state_t, action_t, reward_t, state_t_1, done])
+        if self.get_action_level == 1:
+            self.replay_memory1.append([state_t, action_t, reward_t, state_t_1, done])
+        elif self.get_action_level == 2:
+            self.replay_memory2.append([state_t, action_t, reward_t, state_t_1, done])
 
-    def recall(self):
-        return random.sample(self.replay_memory, self.mini_batch_size)
+    def recall(self, level):
+        if level == 1:
+            return random.sample(self.replay_memory1, self.mini_batch_size)
+        elif level == 2:
+            return random.sample(self.replay_memory2, self.mini_batch_size)
 
     def train(self):
-        if len(self.replay_memory) < self.mini_batch_size:
+        if len(self.replay_memory1) < self.mini_batch_size:
+            return
+        if len(self.replay_memory2) < self.mini_batch_size:
             return
 
-        data = self.recall()
+        data = self.recall(level=1)
         states, actions, rewards, next_states, are_done = list(zip(*data))
 
         scaled_states = self.scale_state_batch_level1(np.array(states))
         scaled_next_states = self.scale_state_batch_level1(np.array(next_states))
         up_qvalue = self.train_kernel_level1(scaled_states, actions, rewards, scaled_next_states, are_done)
 
-        scaled_states2 = self.scale_state_batch_level2(np.array(states))
-        scaled_next_states2 = self.scale_state_batch_level2(np.array(next_states))
-        scaled_states = np.hstack((scaled_states, scaled_states2))
-        scaled_next_states = np.hstack((scaled_next_states, scaled_next_states2))
+        if self.up_qvalue_ratio < 0.9:
+            data = self.recall(level=2)
+            states, actions, rewards, next_states, are_done = list(zip(*data))
 
-        self.train_kernel_level2(scaled_states, actions, rewards, scaled_next_states, are_done, up_qvalue)
+            scaled_states = self.scale_state_batch_level1(np.array(states))
+            scaled_next_states = self.scale_state_batch_level1(np.array(next_states))
+            scaled_states2 = self.scale_state_batch_level2(np.array(states))
+            scaled_next_states2 = self.scale_state_batch_level2(np.array(next_states))
+            scaled_states = np.hstack((scaled_states, scaled_states2))
+            scaled_next_states = np.hstack((scaled_next_states, scaled_next_states2))
+
+            #up_qvalue = np.max(self.target_model_level1.predict(self.scale_state_batch_level1(np.array(next_states))), axis=1)
+            # up_action = np.argmax(self.target_model_level1.predict(self.scale_state_batch_level1(np.array(states))), axis=1)
+            up_qvalue = self.target_model_level1.predict(self.scale_state_batch_level1(np.array(next_states)))
+            self.train_kernel_level2(scaled_states, actions, rewards, scaled_next_states, are_done, up_qvalue)
 
         # before model trained well, use random
         if self.epsilon > self.min_epsilon:
             self.epsilon *= self.epsilon_decay
+
+        self.up_qvalue_ratio *= self.up_qvalue_ratio_decay
 
         self.target_model_level1.set_weights(self.model_level1.get_weights())
         self.target_model_level2.set_weights(self.model_level2.get_weights())
@@ -144,23 +198,49 @@ class DDQNModel:
         index = np.arange(len(q_value_from_model))  # [0, 1, 2, ..., batch_size]
         q_value_from_model[index, actions] = q_value_for_update
 
-        self.model_level1.fit(np.array(states), q_value_from_model, batch_size=self.mini_batch_size, verbose=0)
+        self.model_level1.fit(np.array(states),
+                              q_value_from_model,
+                              batch_size=self.mini_batch_size,
+                              verbose=0,
+                              epochs=self.epoch,
+                              callbacks=[CustomCallback()])
 
         return q_value_for_update
 
     def train_kernel_level2(self, states, actions, rewards, next_states, are_done, uplevel_rewards):
 
         expected_q_value_next_state = np.max(self.target_model_level2.predict(next_states), axis=1)
+        # strategy 4:
+        # index = np.arange(len(expected_q_value_next_state))  # [0, 1, 2, ..., batch_size]
+        # expected_q_value_next_state += 0.4*uplevel_rewards[index, actions]
+
         q_value_for_update = self.gamma * expected_q_value_next_state * np.logical_not(are_done) + rewards
 
+        # strategy 5:
+        # level1_action = np.argmax(uplevel_rewards, axis=1)
+        # consistent_ratio = q_value_for_update * (np.array(actions == level1_action) - 0.5)
+        # q_value_for_update += consistent_ratio
+
         # strategy 1: max
-        q_value_for_update = np.max(np.array([q_value_for_update, uplevel_rewards]), axis=0)
+        #q_value_for_update = np.max(np.array([q_value_for_update, uplevel_rewards]), axis=0)
+
+        # strategy 2: with ratio
+        # q_value_for_update = q_value_for_update + uplevel_rewards * self.up_qvalue_ratio
+
+        # strategy 3: with prob
+        # if random.random() < self.up_qvalue_ratio:
+        #     q_value_for_update = np.max(np.array([q_value_for_update, uplevel_rewards]), axis=0)
 
         q_value_from_model = self.model_level2.predict(states)
         index = np.arange(len(q_value_from_model))  # [0, 1, 2, ..., batch_size]
         q_value_from_model[index, actions] = q_value_for_update
 
-        self.model_level2.fit(np.array(states), q_value_from_model, batch_size=self.mini_batch_size, verbose=0)
+        self.model_level2.fit(np.array(states),
+                              q_value_from_model,
+                              batch_size=self.mini_batch_size,
+                              verbose=0,
+                              epochs=self.epoch,
+                              callbacks=[CustomCallback()])
 
     def save(self):
         if self.model_path:

@@ -2,8 +2,8 @@ import unittest
 
 import numpy as np
 
-from recursive_marl_model.model.ddqn import DDQNModel
-from recursive_marl_model.env.simple_env import RobotTaskAllocationEnv
+from marl_model.model.ddqn import DDQNModel
+from marl_model.env.simple_env import RobotTaskAllocationEnv
 
 
 class TestDDQNModel(unittest.TestCase):
