@@ -114,7 +114,7 @@ def setup_env_and_model(model_path, qmodel, env_shape, env_map=None, env_name=No
         ogm = ProbEnvMap1(env_shape)
     elif env_map == 'none':
         ogm = None
-    
+
     if env_cls is None:
         if env_name == 'mts':
             env_cls = RobotTaskAllocationMapStateEnv
@@ -133,17 +133,17 @@ def setup_env_and_model(model_path, qmodel, env_shape, env_map=None, env_name=No
     if model is None:
         if qmodel == 'dqn':
             model = DQNModel(env.observation_space,
-                            env.action_space,
-                            model_path=model_path,
-                            kernel_size=kernel_size,
-                            input_channel=env.TOTAL_CHANNEL)
+                             env.action_space,
+                             model_path=model_path,
+                             kernel_size=kernel_size,
+                             input_channel=env.TOTAL_CHANNEL)
         elif qmodel == 'cdqn':
             if env_shape[0] > 9 and env_shape[1] > 9:
                 model = CDQNModel(env.observation_space,
-                                env.action_space,
-                                model_path=model_path,
-                                kernel_size=kernel_size,
-                                input_channel=env.TOTAL_CHANNEL)
+                                  env.action_space,
+                                  model_path=model_path,
+                                  kernel_size=kernel_size,
+                                  input_channel=env.TOTAL_CHANNEL)
                 env.is_1d = False
             else:
                 raise RuntimeError('CDQN requires map size larger than 9x9.')
@@ -200,6 +200,7 @@ def train(n_episodes=100000,
             mean_reward = np.array(episode_rewards).mean()
             evaluator.save(i, mean_reward, eval_reward, model, env, model_path)
             print(i, mean_reward, eval_reward)
+            episode_rewards = []
 
 
 def replay(model_path, truck_loc, env_map):
@@ -208,7 +209,6 @@ def replay(model_path, truck_loc, env_map):
         env, model, count = setup_env_and_model(model_path, None, None, resume_mode='model', env_map=env_map)
     else:
         env, model, count = setup_env_and_model(model_path, None, None, resume_mode='all')
-
 
     if truck_loc is None:
         truck_loc = env.map.shape[0] // 2, env.map.shape[1] // 2

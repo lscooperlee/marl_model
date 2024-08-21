@@ -4,7 +4,7 @@ setup(name='marl_model',
       version='1.0',
       package_dir={'': 'src'},
       packages=find_packages("src"),
-      install_requires=['tensorflow', 'plotly', 'pandas'],
+      install_requires=['tensorflow', 'plotly', 'pandas', 'torch'],
       entry_points={
           "console_scripts": ["marl = marl_model.__main__:main"],
       })

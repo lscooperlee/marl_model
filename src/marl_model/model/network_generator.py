@@ -22,7 +22,7 @@ class PlainNetworkGenerator:
     callback = CustomCallback()
 
     def create_q_model(self, state_size, action_size, channel):
-        observation = keras.layers.Input(shape=state_size[0] * state_size[1] * channel, name='input')
+        observation = keras.layers.Input(shape=(state_size[0] * state_size[1] * channel,), name='input')
         layer1 = keras.layers.Dense(64, activation="relu")(observation)
         layer2 = keras.layers.Dense(64, activation="relu")(layer1)
         action = keras.layers.Dense(action_size, activation="linear")(layer2)
